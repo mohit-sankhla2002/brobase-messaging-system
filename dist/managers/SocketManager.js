@@ -12,7 +12,7 @@ class SocketManager {
                 origin: "*"
             }
         });
-        sub.subscribe("MESSAGES");
+        sub.subscribe("DEFAULT_MESSAGES", "GROUP_MESSAGES");
     }
     get io() {
         return this._io;
@@ -20,15 +20,19 @@ class SocketManager {
     initalizeListeners() {
         this._io.on("connect", (socket) => {
             console.log(`New Socket Connected: ${socket.id}`);
-            socket.join("Global");
             socket.on("event:default_message", (msg) => {
-                pub.publish("MESSAGES", JSON.stringify({ message: msg.message }));
+                pub.publish("DEFAULT_MESSAGES", JSON.stringify(msg));
                 console.log(msg);
             });
-            socket.on("join:groups", (msg) => {
+            socket.on("event:group_message", (msg) => {
+                pub.publish("GROUP_MESSAGES", JSON.stringify(msg));
+                console.log(msg);
+            });
+            socket.on("event:join_group", (msg) => {
                 try {
-                    const serializedMessage = JSON.parse(msg);
-                    socket.join(serializedMessage.groupIds);
+                    let groupIds = msg.groupIds;
+                    groupIds = groupIds.concat("Global");
+                    socket.join(groupIds);
                 }
                 catch (error) {
                     console.log(error);
@@ -36,9 +40,13 @@ class SocketManager {
             });
         });
         sub.on("message", (channel, msg) => {
-            if (channel === "MESSAGES") {
+            if (channel === "DEFAULT_MESSAGES") {
                 console.log(msg);
-                this.io.to("Global").emit("event:default_message", msg);
+                this.io.to("Global").emit("event:default_message", JSON.parse(msg));
+            }
+            if (channel === "GROUP_MESSAGES") {
+                const serializedMessage = JSON.parse(msg);
+                this.io.to(serializedMessage.groupId).emit("event:group_message", serializedMessage);
             }
         });
     }
