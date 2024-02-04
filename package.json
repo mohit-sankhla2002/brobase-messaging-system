@@ -5,9 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsc -b && node dist/index.js",
-    "start:consumer": "tsc -b && node dist/consume.js",
-    "db:redis-start": "docker start redis-server",
-    "db:redis-create": "docker run --name redis-server -d -p 6379:6379 redis"
+    "redis": "docker run --rm -p 6379:6379 redis",
+    "start:consumer": "tsc -b && node dist/consume.js"
   },
   "dependencies": {
     "@prisma/client": "5.8.0",
