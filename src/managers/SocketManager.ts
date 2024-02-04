@@ -1,9 +1,21 @@
 import { Server, Socket } from 'socket.io';
 import { Redis } from 'ioredis';
-import prisma from '../utils/prisma';
 const pub = new Redis("redis://:@127.0.0.1:6379/");
 const sub = new Redis("redis://:@127.0.0.1:6379/");
-import { Message } from '../utils/types';
+import { PrismaClient } from '@prisma/client';
+import Queue from './QueueManager';
+const prisma = new PrismaClient({ log: ["query", "error"] });
+
+export interface ModifiedMessage {
+    id: string, 
+    username: string, 
+    payload: string, 
+    senderId: string, 
+    groupId: string,
+    createdAt: Date
+  }
+  
+
 class SocketManager {
     private _io: Server;
 
@@ -14,7 +26,7 @@ class SocketManager {
                 origin: "*"
             }
         });
-        sub.subscribe("DEFAULT_MESSAGES", "GROUP_MESSAGES");
+        sub.subscribe("GROUP_MESSAGES");
     }
 
     get io() {
@@ -24,10 +36,6 @@ class SocketManager {
     initalizeListeners() {
         this._io.on("connect", (socket: Socket) => {
             console.log(`New Socket Connected: ${socket.id}`);
-            socket.on("event:default_message", (msg) => {
-                pub.publish("DEFAULT_MESSAGES", JSON.stringify(msg));
-                console.log(msg);
-            });
 
             socket.on("event:group_message", (msg) => {
                 pub.publish("GROUP_MESSAGES", JSON.stringify(msg));
@@ -45,16 +53,20 @@ class SocketManager {
                 }
             });
         })
-
-        sub.on("message", (channel, msg) => {
-            if (channel === "DEFAULT_MESSAGES") {
-                console.log(msg);
-                this.io.to("Global").emit("event:default_message", JSON.parse(msg));
-            }
-
+        
+        sub.on("message", async (channel, msg) => {
             if (channel === "GROUP_MESSAGES") {
-                const serializedMessage = JSON.parse(msg) as Message;
-                this.io.to(serializedMessage.groupId!).emit("event:group_message", serializedMessage);
+                const serializedMessage = JSON.parse(msg) as ModifiedMessage;
+                console.log(msg);
+                const { groupId } = serializedMessage;
+                await prisma.message.create({ 
+                    data: {
+                        groupId: serializedMessage.groupId,
+                        senderId: serializedMessage.senderId,
+                        payload: serializedMessage.payload
+                    }
+                });
+                this.io.to(groupId!).emit("event:group_message", serializedMessage);
             }
         });
     }
